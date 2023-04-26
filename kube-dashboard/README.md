@@ -36,7 +36,7 @@ kubeOidcProxy:
 # here we use namespace addon-system
 helm install kube-dashboard -n addon-system .
 ```
-* The pod will failed to start due to the missing of dashboard-kubeconfig configmap, and we'll create it at the next step.
+* The pod will failed to start(ContainerCreating) due to the missing of dashboard-kubeconfig configmap, and we'll create it at the next step.
 
 3. Create the kubeconfig file for kube-dashboard to use, so it can point to the kube-oidc-proxy address, and use the correct certificate and token.
 ```
@@ -45,7 +45,7 @@ $ cp sample-kubeconfig kubeconfig
 # edit kubeconfig file to use the correct cluster.certificate-authority-data, cluster.server, user.token
 
 # Step 1
-$ export CLUSTER_CA=$(kubectl get secret -n u4a-system oidc-proxy-cert-tls -o jsonpath='{.data.ca\.crt}')
+$ export CLUSTER_CA=$(kubectl get secret -n u4a-system oidc-server-root-secret -o jsonpath='{.data.ca\.crt}')
 $ use the value from $CLUSTER_CA to replace cluster.certificate-authority-data(<certificate-authority-data>) in kubeconfig file
 
 # Step 2
@@ -64,7 +64,13 @@ $ kubectl create cm dashboard-kubeconfig --from-file=kubeconfig -n addon-system
 $ kubectl delete pod -n addon-system $(kubectl  get pod -n addon-system | grep kubernetes-dashboard | awk '{print $1}')
 ```
 
-5. Access kube-dashboard using `kubedashboard.<replaced-ingress-nginx-ip>.nip.io` using browser. It should be redirected to your oidc server for login and then redirect to kube-dashboard after successful login.
+5. Add kube-dashboard as a valid OIDC callback URL.
+```
+$ kubectl edit cm oidc-server -n u4a-system
+# find redirectURIs and add a new redirect url 'https://<kubedashboard-host-name>/oauth/callback'
+```
+
+6. Access kube-dashboard using `kubedashboard.<replaced-ingress-nginx-ip>.nip.io` using browser. It should be redirected to your oidc server for login and then redirect to kube-dashboard after successful login.
 
 ### Uninstall
 Uninstall using helm command below.
