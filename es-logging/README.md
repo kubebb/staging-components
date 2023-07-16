@@ -1,8 +1,8 @@
 ## 日志组件：
 
-[ingress+searchguard](#test-with-ingress-and-searchguard)
-[ingress+rbac(推荐模式)](#test-with-ingress-and-rbac)
-[ingress-without-auth](#test-with-ingress-without-auth)
+* [ingress+rbac(推荐模式)](#test-with-ingress-and-rbac)
+* [ingress+searchguard](#test-with-ingress-and-searchguard)
+* [ingress-without-auth](#test-with-ingress-without-auth)
 
 ### 功能描述
 1. helm package包含了安装elasticsearch和对外暴露elasticsearch服务的ingress资源文件;
@@ -131,8 +131,8 @@ ingress:
 > - .Values.elasticsearch.secure: false
 > - .Values.ingress.enabled false
 
-#### [准备镜像(参考之前的镜像)](#image),增加kube-rbac-proxy镜像
-> hub.tenxcloud.com/system_containers/elasticsearch-operator                        v5.4.1-rbac         89aeaffad933   2 hours ago     30.8MB
+#### 依赖镜像
+> hub.tenxcloud.com/system_containers/elasticsearch-operator                        v5.4.1              89aeaffad933   2 hours ago     30.8MB
 > hub.tenxcloud.com/system_containers/elasticsearch                                 7.10.1-ik           3bf941c09b95   8 months ago    963MB
 > hub.tenxcloud.com/system_containers/kubectl                                       v1.20.8             403754878e80   3 months ago    112MB
 > hub.tenxcloud.com/system_containers/fluentd-elk                                   v5.0-kfk            63cd90e77b9c   18 months ago    347MB
@@ -172,15 +172,14 @@ rbacSidecar:
 获取参数 certSecretName: 这个secret需要从u4a-system这个namespace中获取, kubectl get secret oidc-server-root-secret -n u4a-system -o yaml > oidc-server-root-secret.yaml, 将yaml里边的namespace信息改为 addon-system，并通过 kubectl apply -f oidc-server-root-secret.yaml 创建到 addon-system 中。
 
 #### 部署 elasticsearch
-```
-#### 开始安装:
+开始安装:
 - 进入 es-logging/helm-chart 目录，执行 helm install es . -n addon-system
 - helm list -n addon-system,可以看到release数据
-- kubectl get pod -n addon-system查看pod状态(这里有一个job依赖es的状态，可能需要一点时间)
 
-#### wait es-sgadmin-es job completed
-```json
-[root@node171 elasticsearch-operator]# kubectl get pod -n addon-system
+```
+# kubectl get pod -n addon-system查看pod状态(这里有一个job依赖es的状态，可能需要一点时间)
+# wait es-sgadmin-es job completed
+# kubectl get pod -n addon-system
 NAME                                        READY   STATUS      RESTARTS   AGE
 es-allinone-es-0                            1/1     Running     0          5m40s
 es-elasticsearch-operator-88c7cccf6-5scjt   1/1     Running     0          5m51s
@@ -190,35 +189,41 @@ es-sgadmin-es-mmnc4                         0/1     Completed   0          28s
 
 #### 访问 elasticsearch
 1. 获取fluentd sa secret
->  SECRET_NAME=$(kubectl get secret -n addon-system | grep fluentd | awk '{print $1}')
+```
+SECRET_NAME=$(kubectl get secret -n addon-system | grep fluentd | awk '{print $1}')
+```
 2. 获取访问elasticsearch的token
-> TOKEN=$(kubectl get secret $SECRET_NAME -n addon-system -o yaml | grep "token:" | awk -F": " '{print $2}' | base64 -d)
+```
+TOKEN=$(kubectl get secret $SECRET_NAME -n addon-system -o yaml | grep "token:" | awk -F": " '{print $2}' | base64 -d)
+```
 3. 获取ingress信息
-> ES_HOST=$(kubectl get ingress ingress-es -n addon-system | grep ingress-es | awk '{print $3}')
-> INGRESS_IP=$(kubectl get ingress ingress-es -n addon-system | grep ingress-es | awk '{print $4}')
+```
+ES_HOST=$(kubectl get ingress ingress-es -n addon-system | grep ingress-es | awk '{print $3}')
+INGRESS_IP=$(kubectl get ingress ingress-es -n addon-system | grep ingress-es | awk '{print $4}')
+```
 4. 访问elasticsearch
-> curl -H"Authorization: Bearer $TOKEN" http://$INGRESS_IP -H "Host: $ES_HOST"
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://$INGRESS_IP -H "Host: $ES_HOST"
+```
+会返回如下提示信息，说明日志服务正常启动：
 ```json
-curl -H"Authorization: Bearer $TOKEN" http://$INGRESS_IP -H "Host: $ES_HOST"
 {
-"name" : "es-allinone-es-0",
-"cluster_name" : "es",
-"cluster_uuid" : "ATBDAzVHQeSDb7gaKdgNUw",
-"version" : {
-"number" : "7.10.1",
-"build_flavor" : "default",
-"build_type" : "tar",
-"build_hash" : "7a15d2a",
-"build_date" : "2020-08-12T07:27:20.804867Z",
-"build_snapshot" : false,
-"lucene_version" : "7.7.3",
-"minimum_wire_compatibility_version" : "5.6.0",
-"minimum_index_compatibility_version" : "5.0.0"
-},
-"tagline" : "You Know, for Search"
+	"name": "es-allinone-es-0",
+	"cluster_name": "es",
+	"cluster_uuid": "ATBDAzVHQeSDb7gaKdgNUw",
+	"version": {
+		"number": "7.10.1",
+		"build_flavor": "default",
+		"build_type": "tar",
+		"build_hash": "7a15d2a",
+		"build_date": "2020-08-12T07:27:20.804867Z",
+		"build_snapshot": false,
+		"lucene_version": "7.7.3",
+		"minimum_wire_compatibility_version": "5.6.0",
+		"minimum_index_compatibility_version": "5.0.0"
+	},
+	"tagline": "You Know, for Search"
 }
-
-
 ```
 
 ### <a id=test-with-ingress-without-auth> 2. ingress 下不开启 RBAC 认证</a>
@@ -227,7 +232,7 @@ curl -H"Authorization: Bearer $TOKEN" http://$INGRESS_IP -H "Host: $ES_HOST"
 > - .Values.ingress.enabled true
 
 #### [准备镜像(参考之前的镜像)](#image)
-> hub.tenxcloud.com/system_containers/elasticsearch-operator                        v5.4.1-rbac         89aeaffad933   2 hours ago     30.8MB
+> hub.tenxcloud.com/system_containers/elasticsearch-operator                        v5.4.1              89aeaffad933   2 hours ago     30.8MB
 > hub.tenxcloud.com/system_containers/elasticsearch                                 7.10.1-ik           3bf941c09b95   8 months ago    963MB
 > hub.tenxcloud.com/system_containers/kubectl                                       v1.20.8             403754878e80   3 months ago    112MB
 > hub.tenxcloud.com/system_containers/fluentd-elk                                   v5.0-kfk            63cd90e77b9c   18 months ago    347MB
@@ -239,34 +244,34 @@ curl -H"Authorization: Bearer $TOKEN" http://$INGRESS_IP -H "Host: $ES_HOST"
 
 #### 访问 elasticsearch
 1. 获取ingress信息
-> ES_HOST=$(kubectl get ingress ingress-es -n addon-system | grep ingress-es | awk '{print $3}')
-> INGRESS_IP=$(kubectl get ingress ingress-es -n addon-system | grep ingress-es | awk '{print $4}')
+``````
+ES_HOST=$(kubectl get ingress ingress-es -n addon-system | grep ingress-es | awk '{print $3}')
+INGRESS_IP=$(kubectl get ingress ingress-es -n addon-system | grep ingress-es | awk '{print $4}')
+``````
 2. 访问elasticsearch
-> curl -H"Authorization: Bearer $TOKEN" http://$INGRESS_IP -H "Host: $ES_HOST"
-
-```json
+```bash
 curl http://$INGRESS_IP -H "Host: $ES_HOST"
-{
-"name" : "es-allinone-es-0",
-"cluster_name" : "es",
-"cluster_uuid" : "7sB2YaloRqSI8dLcWFt7JA",
-"version" : {
-"number" : "7.10.1",
-"build_flavor" : "default",
-"build_type" : "tar",
-"build_hash" : "7a15d2a",
-"build_date" : "2020-08-12T07:27:20.804867Z",
-"build_snapshot" : false,
-"lucene_version" : "7.7.3",
-"minimum_wire_compatibility_version" : "5.6.0",
-"minimum_index_compatibility_version" : "5.0.0"
-},
-"tagline" : "You Know, for Search"
-}
-
-
 ```
-
+会返回如下提示信息，说明日志服务正常启动：
+```
+{
+	"name": "es-allinone-es-0",
+	"cluster_name": "es",
+	"cluster_uuid": "ATBDAzVHQeSDb7gaKdgNUw",
+	"version": {
+		"number": "7.10.1",
+		"build_flavor": "default",
+		"build_type": "tar",
+		"build_hash": "7a15d2a",
+		"build_date": "2020-08-12T07:27:20.804867Z",
+		"build_snapshot": false,
+		"lucene_version": "7.7.3",
+		"minimum_wire_compatibility_version": "5.6.0",
+		"minimum_index_compatibility_version": "5.0.0"
+	},
+	"tagline": "You Know, for Search"
+}
+```
 
 ### <a id=test-with-ingress-and-searchguard>3. 使用 ingress 与 searchguard 认证的模式</a>
 > - .Values.rbacSidecar.enabled: false
@@ -274,13 +279,14 @@ curl http://$INGRESS_IP -H "Host: $ES_HOST"
 > - .Values.ingress.enabled true
 
 #### <a id=image>准备镜像</a>
-> hub.tenxcloud.com/system_containers/elasticsearch-operator                        v5.4.1-rbac         89aeaffad933   2 hours ago     30.8MB
+> hub.tenxcloud.com/system_containers/elasticsearch-operator                        v5.4.1              89aeaffad933   2 hours ago     30.8MB
 > hub.tenxcloud.com/system_containers/elasticsearch                                 7.10.1-ik           3bf941c09b95   8 months ago    963MB 
 > hub.tenxcloud.com/system_containers/kubectl                                       v1.20.8             403754878e80   3 months ago    112MB
 > hub.tenxcloud.com/system_containers/fluentd-elk                                   v5.0-kfk            63cd90e77b9c   18 months ago    347MB
 #### <a id=value> 调整values.yml文件</a>
 解压helm package进入到目录(tar -zxvf elasticsearch-operator-v0830.tgz && cd elasticsearch-operator)修改values.yaml文件 \
 <b>关注加注释的部分</b>,调整加注释的那些字段,注释中标注了required表示一定需要修改的
+
 ```yaml
 operatorName: elasticsearch-operator
 namespace: addon-system  #elasticsearch-operator安装的namespace,eg.addon-system
@@ -385,32 +391,40 @@ ingress:
   #- secretName: chart-example-tls
   #    hosts:
   #      - chart-example.local
+```
 
 #### 访问elasticsearch
 1. 获取elasticsearch认证密码
-> PASSWD=$(kubectl get secret es-certs-es -n addon-system -o yaml | grep password | awk -F ': ' '{print $2}' | base64 -d)
+```
+PASSWD=$(kubectl get secret es-certs-es -n addon-system -o yaml | grep password | awk -F ': ' '{print $2}' | base64 -d)
+```
 2. 获取ingress信息
-> ES_HOST=$(kubectl get ingress ingress-es -n addon-system | grep ingress-es | awk '{print $3}')
-> INGRESS_IP=$(kubectl get ingress ingress-es -n addon-system | grep ingress-es | awk '{print $4}')
+```
+ES_HOST=$(kubectl get ingress ingress-es -n addon-system | grep ingress-es | awk '{print $3}')
+INGRESS_IP=$(kubectl get ingress ingress-es -n addon-system | grep ingress-es | awk '{print $4}')
+```
 3. 访问elasticsearch
-> curl -u"admin:$PASSWD" http://$INGRESS_IP -H "Host: $ES_HOST"
+```bash
+curl -u"admin:$PASSWD" http://$INGRESS_IP -H "Host: $ES_HOST"
+```
+会返回如下提示信息，说明日志服务正常启动：
 ```json
 {
-"name" : "es-allinone-es-0",
-"cluster_name" : "es",
-"cluster_uuid" : "s6yMnKiuSZimJtLjttSzsQ",
-"version" : {
-"number" : "7.10.1",
-"build_flavor" : "default",
-"build_type" : "tar",
-"build_hash" : "71fcb50",
-"build_date" : "2021-12-19T01:10:56.497443Z",
-"build_snapshot" : false,
-"lucene_version" : "7.7.3",
-"minimum_wire_compatibility_version" : "5.6.0",
-"minimum_index_compatibility_version" : "5.0.0"
-},
-"tagline" : "You Know, for Search"
+	"name": "es-allinone-es-0",
+	"cluster_name": "es",
+	"cluster_uuid": "ATBDAzVHQeSDb7gaKdgNUw",
+	"version": {
+		"number": "7.10.1",
+		"build_flavor": "default",
+		"build_type": "tar",
+		"build_hash": "7a15d2a",
+		"build_date": "2020-08-12T07:27:20.804867Z",
+		"build_snapshot": false,
+		"lucene_version": "7.7.3",
+		"minimum_wire_compatibility_version": "5.6.0",
+		"minimum_index_compatibility_version": "5.0.0"
+	},
+	"tagline": "You Know, for Search"
 }
 
 ```
