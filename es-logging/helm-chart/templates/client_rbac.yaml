@@ -1,0 +1,22 @@
+{{- if .Values.rbacSidecar.enabled -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: logging-access
+rules:
+- nonResourceURLs: ["/*"]
+  verbs: ["get","post", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: logging-access
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: logging-access
+subjects:
+- kind: Group
+  name: observability
+
+{{- end}}

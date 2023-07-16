@@ -1,0 +1,120 @@
+deployConfig:
+  # image repository address
+  imageRepo: &imageRepo
+    hub.tenxcloud.com/system_containers
+
+  elasticsearchCluster:
+    # allinOne cluster mode, just only one es Pod
+    allinOne: &allinOne
+      true
+    # in cluster mode, change clientNode, masterNode, dataNode replicas
+    clientNodeReplicas: &clientNodeReplicas
+      2
+    masterNodeReplicas: &masterNodeReplicas
+      3
+    dataNodeReplicas:  &dataNodeReplicas
+      3
+    #  storage size for es storage the data
+    dataDiskSize: &dataDiskSize
+      50Gi
+  # storageclass need update according to environment
+    storageClass: &storageClass
+      openebs-hostpath
+    javaOptions:
+    #  searchguard mode, which is using baseAuth authorization accessing elasticsearch cluster,
+    # it is false in default, which should be set to false using OIDC authorization.
+    secure: &secure
+      false
+
+  oidcConfig:
+    # change the host into bff-server ingress host
+    oidcIssuer: &oidcIssuer
+      https://portal.172.22.96.209.nip.io/oidc
+    # registered oidc client
+    oidcClientID: &oidcClientID
+      bff-client
+
+  fluentdConfig:
+    installEnabled: &installEnabled
+      true
+    # collectionType supports collect audit and container log. the default setting is audit. Support value:
+    # audit:  collect audit log
+    # container: collect container log
+    # audit, container: collect audit and container log
+    collectionType: &collectionType
+      audit
+    #  the oidcProxyNode is a kubernetes node where the oidc proxy is deployed. fluentd collects audit logs from this node.
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+              - 21v-tc-kubedata-2
+
+  # ingressClass name. you can get by: kubectl get ingressclass
+  ingressClass: &ingressClass
+    portal-ingress
+  # address which logging exposed by ingess. IP is node's IP where ingress controller deployed
+  loggingHost: &loggingHost
+    logging.172.22.96.209.nip.io
+
+# ---- TODO:need update above config according deployed environment ---
+
+kubectlImage: kubectl:v1.20.8
+
+operatorImage: elasticsearch-operator:v5.4.1
+
+elasticsearch:
+  enabled: true
+  name: es
+  affinity:
+  allInOne: *allinOne
+  clientNodeReplicas: *clientNodeReplicas
+  masterNodeReplicas: *masterNodeReplicas
+  dataNodeReplicas: *dataNodeReplicas
+  dataDiskSize: *dataDiskSize
+  image: elasticsearch:7.10.1-ik
+  secure: *secure
+  javaOptions: -Xms2g -Xmx2g
+  masterDiskSize: 1Gi
+  resources:
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+    requests:
+      cpu: "10m"
+      memory: "2Gi"
+  storage:
+    storageClass: *storageClass
+
+rbacSidecar:
+  enabled: true
+  image: kube-rbac-proxy:v0.13.0-32f11472
+  certSecretName: oidc-server-root-secret
+  oidcIssuer: *oidcIssuer
+  oidcClientID: *oidcClientID
+
+fluentd:
+  enabled: *installEnabled
+  logCollectionType: *collectionType
+  image: fluentd-elk:v5.0-kfk
+
+ingress:
+  # use exiting ingress, so disabled by default
+  enabled: true
+  className: ""
+  ingressName: "logging-ingress"
+  annotations:
+    ingressClass: *ingressClass
+  hosts:
+  - host: *loggingHost
+    paths:
+    - path: /
+      pathType: ImplementationSpecific
+  tls: []
+ # - secretName: logging-secret
+ #     hosts:
+ #       - *loggingHost

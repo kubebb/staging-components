@@ -1,0 +1,70 @@
+apiVersion: es.k8s.io/v1beta1
+kind: ElasticSearch
+metadata:
+  name: {{ .Values.elasticsearch.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  enabled: {{.Values.elasticsearch.enabled }}
+  {{- with .Values.elasticsearch.storage }}
+  storage:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.elasticsearch.affinity }}
+  affinity:
+    {{- toYaml . | nindent 2 }}
+  {{- end }}
+  secure: {{ .Values.elasticsearch.secure }}
+  elastic-search-image: {{ .Values.deployConfig.imageRepo}}/{{ .Values.elasticsearch.image }}
+  allInOne: {{ .Values.elasticsearch.allInOne }}
+  client-node-replicas: {{ .Values.elasticsearch.clientNodeReplicas }}
+  master-node-replicas: {{ .Values.elasticsearch.masterNodeReplicas }}
+  data-node-replicas: {{ .Values.elasticsearch.dataNodeReplicas }}
+  masterDiskSize: {{ .Values.elasticsearch.masterDiskSize }}
+  dataDiskSize: {{ .Values.elasticsearch.dataDiskSize }}
+  java-options: {{ .Values.elasticsearch.javaOptions }}
+  {{- with .Values.elasticsearch.resources }}
+  resources:
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+
+  {{- if .Values.rbacSidecar.enabled }}
+  rbac-sidecar:
+    enabled: true
+    certSecretName: oidc-server-root-secret
+    image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.rbacSidecar.image }}
+    args:
+    - --insecure-listen-address=0.0.0.0:8443
+    - --upstream=http://127.0.0.1:9200
+    - --oidc-issuer={{.Values.rbacSidecar.oidcIssuer}}
+    - --oidc-clientID={{ .Values.rbacSidecar.oidcClientID }}
+    - --oidc-username-claim=preferred_username
+    - --oidc-ca-file=/etc/oidc-server/tls/ca.crt
+    - --token-passthrough
+    - --logtostderr=true
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 512Mi
+  {{- end }}
+  {{- if .Values.fluentd.enabled }}
+  fluentd:
+    enabled: true
+    logCollectionType: {{ .Values.fluentd.logCollectionType }}
+    image: {{.Values.deployConfig.imageRepo}}/{{ .Values.fluentd.image}}
+    tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
+    affinity: {{ toYaml .Values.deployConfig.fluentdConfig.affinity | nindent 6 }}
+    resources:
+      limits:
+        cpu: "1"
+        memory: 2Gi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+  {{- end }}
