@@ -1,0 +1,141 @@
+# Default values for monitoring-operator.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+deployConfig:
+  # image repository address
+  imageRepo: &imageRepo
+    172.22.50.227/system_monitoring
+  # ingressClass name. you can get by: kubectl get ingressclass
+  ingressClass: &ingressClass
+    nginx
+  # address which monitoring exposed by ingess. IP is node's IP where ingress controller deployed
+  monitoringHost: &monitoringHost
+    monitoring.172.22.96.16.nip.io
+  # data storaged time, unit: month
+  dataRetention: &dataRetention
+    1
+  # storageclass need update according to environment
+  storageClass: &storageClass
+    openebs-localpv
+
+  alertting:
+    enabled: &enabled
+      false
+    # the webhhook will be recevied alerting message sended by alertmanager
+    webhookHost: &webhookHost
+      172.22.50.217
+    webhookSchema: &webhookSchema
+      https
+
+  oidcConfig:
+    # change the host to bff-server ingress host
+    oidcIssuer: &oidcIssuer
+      https://portal.172.22.96.16.nip.io/oidc
+    # registered oidc client
+    oidcClientID: &oidcClientID
+      "bff-client"
+
+# ---- TODO:need update above config according deployed environment ---
+
+monitoringOperator:
+  image: monitoring-operator:v5.6.0-tdsfa
+
+kubectlImage: kubectl:v1.20.8
+
+ingress:
+  enabled: true
+  className: "" # 无须修改
+  ingressName: "monitoring-ingress"
+  annotations:
+    kubernetes.io/ingress.class: *ingressClass
+  labels: {}
+  hosts:
+    - host: *monitoringHost
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+
+nodeExporter:
+  enabled: true
+  image: node-exporter:v0.17.0
+  resources:
+    limits:
+      cpu: '1'
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 512Mi
+
+victoriametrics:
+  operator:
+    image: vm-operator:v0.14.2-tdsfa
+
+  vmagent:
+    image: vmagent:v1.58.0
+    configReloaderImage: prometheus-config-reloader:v0.42.0
+    nodePort: 0
+
+  vmalert:
+    enabled: *enabled
+    image: vmalert:v1.58.0
+    configmapReloaderImage: prom-rule-reloader:v0.1.2
+
+  vmalertmanager:
+    enabled: *enabled
+    image: alertmanager:v0.20.0
+    configmapReloaderImage: configmap-reload:v0.3.0
+
+  vmui:
+    enabled: false
+    nodePort: 0
+    image: vmui:v0.1.0
+
+  vmcluster:
+    retention: *dataRetention
+    vminsert:
+      image: vminsert:v1.58.0-cluster
+
+    vmstorage:
+      image: vmstorage:v1.58.0-cluster
+      volumeClaimTemplate:
+        storageClassName: *storageClass
+        requests: 20Gi
+
+    vmselect:
+      image: vmselect:v1.58.0-cluster
+      nodePort: 0
+      sidecar:
+        enabled: true
+        oidcIssuer: *oidcIssuer
+        oidcClientID: *oidcClientID
+        oidcCASecret: oidc-server-root-secret
+        vmselectPort: 8483
+        image: kube-rbac-proxy:v0.13.0-32f11472
+        resources:
+          limits:
+            cpu: '1'
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+
+metricsServer:
+  enabled: true
+  image: metrics-server:v0.4.1
+
+kubeStateMetrics:
+  enabled: true
+  image: kube-state-metrics:v1.9.7
+
+grafana:
+  enabled: false
+  image: grafana:6.4.3
+  volumeClaimTemplate:
+    storageClassName: *storageClass
+    requests: 100Mi
+
+# 配置告警产生后alertmanager告警推送地址,可在 kubectl  get cm  monitoring-config -n system-monitoring -o yaml查看
+webhookAddr:
+  alertHost: *webhookHost
+  alertSchema: *webhookSchema

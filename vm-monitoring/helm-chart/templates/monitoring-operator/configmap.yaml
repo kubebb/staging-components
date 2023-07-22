@@ -1,0 +1,299 @@
+apiVersion: v1
+data:
+  config.yaml: |-
+    nodeExporter:
+      enable: {{ .Values.nodeExporter.enabled }}
+      image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.nodeExporter.image }}
+      resources:
+        {{- toYaml .Values.nodeExporter.resources | nindent 8 }}
+    kubeStateMetrics:
+      enable: {{ .Values.kubeStateMetrics.enabled }}
+      replicas: 1
+      image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.kubeStateMetrics.image }}
+      resources:
+        limits:
+          cpu: '1'
+          memory: 1Gi
+        requests:
+          cpu: 100m
+          memory: 512Mi
+    monitoringComponents:
+      # alertSchema 和 alertHost  非必须，默认地址为http://tce.system-tce.svc.cluster.local
+      alertHost: {{ .Values.webhookAddr.alertHost }}
+      alertSchema: {{ .Values.webhookAddr.alertSchema }}
+      prometheus:
+        enable: false
+        prometheusOperator:
+          image: 192.168.1.52/system_containers/prometheus-operator:v0.34.0
+          configReloaderImage: 192.168.1.52/system_containers/prometheus-config-reloader:v0.34.0
+          configmapReloaderImage: 192.168.1.52/system_containers/configmap-reload:v0.0.1
+          resources:
+            limits:
+              cpu: '1'
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 512Mi
+          nodeSelector:
+            node-role.kubernetes.io/infra: "true"
+        prometheus:
+          nodePort: 30900
+          retention: 126h
+          nodeSelector:
+            node-role.kubernetes.io/infra: "true"
+          image: 192.168.1.52/system_containers/prometheus:v2.19.2
+          ruleAggrationImage: 192.168.1.52/system_containers/prom-rule-reloader:v0.1.2
+          resources:
+            limits:
+              cpu: '4'
+              memory: 4Gi
+            requests:
+              cpu: 200m
+              memory: 128Mi
+          volumeClaimTemplate:
+            spec:
+              accessModes: [ "ReadWriteOnce" ]
+              storageClassName: "openebs-hostpath"
+              resources:
+                requests:
+                  storage: 20Gi
+        alertmanager:
+          nodeSelector:
+            node-role.kubernetes.io/infra: "true"
+          image: 192.168.1.52/system_containers/alertmanager:v0.20.0
+          resources:
+            limits:
+              cpu: '1'
+              memory: 1Gi
+            requests:
+              cpu: 20m
+              memory: 64Mi
+      victoriametrics:
+        enable: true
+        operator:
+          image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.victoriametrics.operator.image }}
+          resources:
+            limits:
+              cpu: 1
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+        vmagent:
+          image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.victoriametrics.vmagent.image }}
+          configReloaderImage: {{ .Values.deployConfig.imageRepo }}/{{ .Values.victoriametrics.vmagent.configReloaderImage }}
+          {{- if .Values.victoriametrics.vmagent.nodePort }}
+          nodePort: {{ .Values.victoriametrics.vmagent.nodePort }}
+          {{- end }}
+          maxScrapeSize: 32MB
+          resources:
+            limits:
+              cpu: '1'
+              memory: 1Gi
+            requests:
+              cpu: 200m
+              memory: 512Mi
+        vmalert:
+          {{- if .Values.victoriametrics.vmalert.enabled }}
+          replicas: 1
+          {{- else }}
+          replicas: 0
+          {{- end }}
+          image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.victoriametrics.vmalert.image }}
+          configmapReloaderImage: {{ .Values.deployConfig.imageRepo }}/{{ .Values.victoriametrics.vmalert.configmapReloaderImage }}
+          notifier:
+            url: http://vmalertmanager-alertmanager.{{ .Release.Namespace }}.svc:9093
+          datasource:
+            url: http://vmselect-vmcluster:8481/select/0/prometheus
+          resources:
+            limits:
+              cpu: '1'
+              memory: 1Gi
+            requests:
+              cpu: 200m
+              memory: 512Mi
+        vmalertmanager:
+          {{- if .Values.victoriametrics.vmalertmanager.enabled }}
+          replicas: 1
+          {{- else }}
+          replicas: 0
+          {{- end }}
+          image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.victoriametrics.vmalertmanager.image }}
+          configmapReloaderImage: {{ .Values.deployConfig.imageRepo }}/{{ .Values.victoriametrics.vmalertmanager.configmapReloaderImage }}
+          resources:
+            limits:
+              cpu: '1'
+              memory: 1Gi
+            requests:
+              cpu: 50m
+              memory: 256Mi
+        vmcluster:
+          # retention 数据保留时间,单位为月
+          retention: {{ .Values.victoriametrics.vmcluster.retention }}
+          vminsert:
+            image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.victoriametrics.vmcluster.vminsert.image }}
+            replicas: 1
+            resources:
+              limits:
+                cpu: '1'
+                memory: 1Gi
+              requests:
+                cpu: 100m
+                memory: 512Mi
+          vmstorage:
+            image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.victoriametrics.vmcluster.vmstorage.image }}
+            replicas: 1
+            resources:
+              limits:
+                cpu: '1'
+                memory: 3Gi
+              requests:
+                cpu: 100m
+                memory: 512Mi
+            volumeClaimTemplate:
+              spec:
+                accessModes: [ "ReadWriteOnce" ]
+                storageClassName: {{ .Values.victoriametrics.vmcluster.vmstorage.volumeClaimTemplate.storageClassName }}
+                resources:
+                  requests:
+                    storage: {{ .Values.victoriametrics.vmcluster.vmstorage.volumeClaimTemplate.requests }}
+          vmselect:
+            {{- if .Values.victoriametrics.vmcluster.vmselect.nodePort }}
+            nodePort: {{ .Values.victoriametrics.vmcluster.vmselect.nodePort }}
+            {{- end }}
+            image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.victoriametrics.vmcluster.vmselect.image }}
+            replicas: 1
+            {{- if .Values.victoriametrics.vmcluster.vmselect.sidecar.enabled }}
+            port: {{ .Values.victoriametrics.vmcluster.vmselect.sidecar.vmselectPort }}
+            containers:
+              - name: kube-rbac-proxy
+                args:
+                - --insecure-listen-address=0.0.0.0:8481
+                - --upstream=http://127.0.0.1:{{ .Values.victoriametrics.vmcluster.vmselect.sidecar.vmselectPort }}/
+                - --logtostderr=true
+                - --oidc-username-claim=preferred_username
+                {{- if  .Values.victoriametrics.vmcluster.vmselect.sidecar.oidcIssuer }}
+                - --oidc-issuer={{ .Values.victoriametrics.vmcluster.vmselect.sidecar.oidcIssuer }}
+                - --oidc-ca-file=/etc/oidc-server/tls/ca.crt
+                - --token-passthrough
+                {{- if  .Values.victoriametrics.vmcluster.vmselect.sidecar.oidcClientID }}
+                - --oidc-clientID={{ .Values.victoriametrics.vmcluster.vmselect.sidecar.oidcClientID }}
+                {{- end }}
+                {{- end }}
+                image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.victoriametrics.vmcluster.vmselect.sidecar.image }}
+                ports:
+                - containerPort: 8481
+                  name: http
+                  protocol: TCP
+                resources:
+                  {{- toYaml .Values.victoriametrics.vmcluster.vmselect.sidecar.resources | nindent 18 }}
+                volumeMounts:
+                - mountPath: /etc/oidc-server/tls
+                  name: tls
+            {{- end }}
+            volumes:
+            - name: tls
+              secret:
+                defaultMode: 420
+                secretName: {{ .Values.victoriametrics.vmcluster.vmselect.sidecar.oidcCASecret }}
+            resources:
+              limits:
+                cpu: '1'
+                memory: 1Gi
+              requests:
+                cpu: 100m
+                memory: 512Mi
+        vmui:
+          replicas: {{- if .Values.victoriametrics.vmui.enabled }} 1{{- else }} 0{{- end }}
+          {{- if .Values.victoriametrics.vmui.nodePort }}
+          nodePort: {{ .Values.victoriametrics.vmui.nodePort }}
+          {{- end }}
+          image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.victoriametrics.vmui.image }}
+    metricsServer:
+      enable: {{ .Values.metricsServer.enabled }}
+      replicas: 1
+      image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.metricsServer.image}}
+      resources:
+        limits:
+          cpu: '1'
+          memory: 1Gi
+        requests:
+          cpu: 20m
+          memory: 64Mi
+    grafana:
+      enable: {{ .Values.grafana.enabled }}
+      replicas: 1
+      nodePort: 30001
+      image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.grafana.image }}
+      resources:
+        limits:
+          cpu: '1'
+          memory: 1Gi
+        requests:
+          cpu: 20m
+          memory: 64Mi
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+          - ReadWriteOnce
+          resources:
+            requests:
+              storage: {{ .Values.grafana.volumeClaimTemplate.requests }}
+          storageClassName: {{ .Values.grafana.volumeClaimTemplate.storageClassName }}
+          volumeMode: Filesystem
+    vpa:
+      recommander:
+        replicas: 0
+        image: 192.168.1.52/system_containers/vpa-recommender:0.8.0
+        resources:
+          limits:
+            cpu: '1'
+            memory: 1Gi
+          requests:
+            cpu: 20m
+            memory: 64Mi
+      updater:
+        replicas: 0
+        image: 192.168.1.52/system_containers/vpa-updater:0.8.0
+        resources:
+          limits:
+            cpu: '1'
+            memory: 1Gi
+          requests:
+            cpu: 20m
+            memory: 64Mi
+      adminController:
+        replicas: 0
+        image: 192.168.1.52/system_containers/vpa-admission-controller:0.8.0
+        resources:
+          limits:
+            cpu: '1'
+            memory: 1Gi
+          requests:
+            cpu: 20m
+            memory: 64Mi
+    prometheusAdapter:
+      replicas: 0
+      image: 192.168.1.52/system_containers/k8s-prometheus-adapter-amd64:v0.8.4
+      resources:
+        limits:
+          cpu: '1'
+          memory: 1Gi
+        requests:
+          cpu: 20m
+          memory: 64Mi
+    pushgateway:
+      replicas: 0
+      nodePort: 30091
+      image: 192.168.1.52/system_containers/pushgateway:1.4.1
+      resources:
+        limits:
+          cpu: 500m
+          memory: 1Gi
+        requests:
+          cpu: 50m
+          memory: 64Mi
+kind: ConfigMap
+metadata:
+  name: monitoring-config
+  namespace: {{ .Release.Namespace }}

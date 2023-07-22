@@ -1,0 +1,57 @@
+{{- if .Values.victoriametrics.vmcluster.vmselect.sidecar.enabled }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Namespace }}-vmcluster-sidecar-additional
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Namespace }}-vmcluster-vmcluster-sidecar-additional
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Namespace }}-vmcluster-sidecar-additional
+subjects:
+  - kind: ServiceAccount
+    name: vmcluster-vmcluster
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: monitoring-access-{{ .Release.Namespace }}
+rules:
+- nonResourceURLs:
+  - /select/0/prometheus/api/v1/query
+  - /select/0/prometheus/api/v1/series
+  - /select/0/prometheus/api/v1/query_range
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: monitoring-access-{{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: monitoring-access-{{ .Release.Namespace }}
+subjects:
+- kind: Group
+  name: observability
+{{- end}}

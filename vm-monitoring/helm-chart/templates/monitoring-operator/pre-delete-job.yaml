@@ -1,0 +1,52 @@
+{{- $cmd := "kubectl delete deployment monitoring-operator -n $NAMESPACE --ignore-not-found && kubectl delete secret alertmanager-configs -n $NAMESPACE --ignore-not-found &&"}}
+{{- if .Values.grafana.enabled  }}
+{{- $cmd = printf "%s kubectl delete secret grafana-datasources -n $NAMESPACE --ignore-not-found && kubectl delete deployment grafana -n $NAMESPACE --ignore-not-found &&" $cmd  -}}
+{{- $cmd = printf "%s kubectl get cm -n $NAMESPACE | grep grafana-  | xargs kubectl delete cm -n $NAMESPACE --ignore-not-found &&" $cmd  -}}
+{{- $cmd = printf "%s kubectl delete pvc grafana-data-pvc -n $NAMESPACE --ignore-not-found && kubectl delete service grafana -n $NAMESPACE --ignore-not-found &&" $cmd  -}}
+{{- $cmd = printf "%s kubectl delete clusterrole grafana --ignore-not-found &&  kubectl delete clusterrolebinding grafana --ignore-not-found  && kubectl delete sa grafana -n $NAMESPACE --ignore-not-found &&" $cmd  -}}
+{{- end }}
+{{- if .Values.kubeStateMetrics.enabled  }}
+{{- $cmd = printf "%s kubectl delete deployment kube-state-metrics -n $NAMESPACE --ignore-not-found && kubectl delete service kube-state-metrics -n $NAMESPACE --ignore-not-found &&" $cmd  -}}
+{{- $cmd = printf "%s kubectl delete clusterrole kube-state-metrics --ignore-not-found &&  kubectl delete clusterrolebinding kube-state-metrics --ignore-not-found  && kubectl delete sa kube-state-metrics -n $NAMESPACE --ignore-not-found &&" $cmd  -}}
+{{- $cmd = printf "%s kubectl delete role kube-state-metrics -n $NAMESPACE --ignore-not-found && kubectl delete rolebinding kube-state-metrics -n $NAMESPACE --ignore-not-found &&" $cmd  -}}
+{{- end }}
+{{- if .Values.metricsServer.enabled  }}
+{{- $cmd = printf "%s kubectl delete deployment metrics-server -n $NAMESPACE --ignore-not-found && kubectl delete service metrics-server -n $NAMESPACE --ignore-not-found &&" $cmd  -}}
+{{- $cmd = printf "%s kubectl delete clusterrole system:metrics-server --ignore-not-found &&  kubectl delete clusterrolebinding system:metrics-server metrics-server:system:auth-delegator  --ignore-not-found  && kubectl delete sa metrics-server -n $NAMESPACE --ignore-not-found &&" $cmd  -}}
+{{- end }}
+{{- if .Values.nodeExporter.enabled  }}
+{{- $cmd = printf "%s kubectl delete daemonset node-exporter --ignore-not-found && kubectl delete service node-exporter -n $NAMESPACE --ignore-not-found &&" $cmd  -}}
+{{- $cmd = printf "%s kubectl delete clusterrole monitoring:node-exporter --ignore-not-found &&  kubectl delete clusterrolebinding monitoring:node-exporter --ignore-not-found  && kubectl delete sa node-exporter -n $NAMESPACE --ignore-not-found &&" $cmd  -}}
+{{- end }}
+{{- $cmd = printf "%s kubectl get crd | grep victoriametrics.com | xargs kubectl delete crd --ignore-not-found &&" $cmd  -}}
+{{- $cmd = printf "%s kubectl delete deployment vmui vm-operator -n $NAMESPACE --ignore-not-found && kubectl delete service vmui -n $NAMESPACE --ignore-not-found &&" $cmd  -}}
+{{- $cmd = printf "%s kubectl delete clusterrole manager-role  vmagent vmalert --ignore-not-found &&  kubectl delete clusterrolebinding manager-rolebinding vmagent vmalert --ignore-not-found &&" $cmd  -}}
+{{- $cmd = printf "%s kubectl delete role leader-election-role -n $NAMESPACE --ignore-not-found &&  kubectl delete RoleBinding -n $NAMESPACE leader-election-rolebinding --ignore-not-found &&  kubectl delete sa -n $NAMESPACE vm-operator vmagent vmalert --ignore-not-found " $cmd  -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-resources-cleaner"
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      name: "{{ .Release.Name }}"
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: pre-delete-job
+          image: {{ .Values.deployConfig.imageRepo }}/{{ .Values.kubectlImage }}
+          command: [ "sh", "-c",  "{{ $cmd }}"]
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+      serviceAccountName: monitoring-operator
